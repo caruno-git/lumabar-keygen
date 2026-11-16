@@ -39,6 +39,13 @@ unsafe extern "system" {
 }
 
 const HMAC_SECRET_B64: &[u8] = b"VAJyCdB7cAWD0LiRgdPr+bPhtbX+bPaVVjTzGvGsGR4=";
+const HMAC_SECRET_V2_B64: &[u8] = b"SJ9gV89f4McZ4jnuBqn4RANz3muXa4C4uIDM9OUIzDE=";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Version {
+    V1219,
+    V1220,
+}
 
 #[derive(Clone)]
 struct Options {
@@ -48,6 +55,7 @@ struct Options {
     output: Option<PathBuf>,
     install: bool,
     stdout: bool,
+    version: Version,
 }
 
 struct License {
@@ -92,9 +100,13 @@ fn run() -> Result<(), String> {
         name: options.name,
         email: options.email,
         activated_at_ms: now,
-        last_validated_at_ms: now + 100 * 365 * 24 * 60 * 60 * 1000,
+        last_validated_at_ms: if options.version == Version::V1220 {
+            now
+        } else {
+            now + 100 * 365 * 24 * 60 * 60 * 1000
+        },
     };
-    let json = license_json(&license)?;
+    let json = license_json(&license, options.version)?;
     if options.stdout {
         println!("{json}");
         return Ok(());
@@ -129,6 +141,7 @@ fn parse_args() -> Result<Option<Options>, String> {
         output: None,
         install: false,
         stdout: false,
+        version: Version::V1220,
     };
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -140,6 +153,13 @@ fn parse_args() -> Result<Option<Options>, String> {
             "--email" => options.email = args.next().ok_or("--email requires a value")?,
             "--machine-id" => {
                 options.machine_id = Some(args.next().ok_or("--machine-id requires a value")?)
+            }
+            "--version" => {
+                options.version = match args.next().ok_or("--version requires a value")?.as_str() {
+                    "1.2.19" => Version::V1219,
+                    "1.2.20" => Version::V1220,
+                    value => return Err(format!("unsupported LumaBar version: {value}")),
+                }
             }
             "--output" => {
                 options.output = Some(PathBuf::from(
@@ -153,8 +173,8 @@ fn parse_args() -> Result<Option<Options>, String> {
 }
 
 fn print_help() {
-    println!("lumabar-keygen 1.0.0 (carunodev)");
-    println!("Generates an offline LumaBar 1.2.19 license with a valid HMAC-SHA256 signature.");
+    println!("lumabar-keygen 1.1.0 (carunodev)");
+    println!("Generates offline LumaBar 1.2.19/1.2.20 licenses with valid HMAC-SHA256 signatures.");
     println!();
     println!("Usage: lumabar-keygen.exe [options]");
     println!("  --install             Write %APPDATA%\\com.lumabar.dock\\license.json");
@@ -163,6 +183,7 @@ fn print_help() {
     println!("  --name <value>        Customer name (default: carunodev)");
     println!("  --email <value>       Customer email (default: carunodev@localhost)");
     println!("  --machine-id <value>  MachineGuid of another PC");
+    println!("  --version <version>   1.2.19 or 1.2.20 (default: 1.2.20)");
 }
 
 fn machine_id() -> String {
@@ -261,7 +282,7 @@ fn random_uuid() -> Result<String, String> {
     ))
 }
 
-fn license_json(license: &License) -> Result<String, String> {
+fn license_json(license: &License, version: Version) -> Result<String, String> {
     let key = base64_decode(HMAC_SECRET_B64)?;
     let message = format!(
         "{}|{}|{}|{}|{}|{}|{}",
@@ -274,8 +295,17 @@ fn license_json(license: &License) -> Result<String, String> {
         license.last_validated_at_ms
     );
     let signature = base64_encode(&hmac_sha256(&key, message.as_bytes()));
+    let second_signature = if version == Version::V1220 {
+        let second_key = base64_decode(HMAC_SECRET_V2_B64)?;
+        Some(base64_encode(&hmac_sha256(&second_key, message.as_bytes())))
+    } else {
+        None
+    };
+    let second_field = second_signature
+        .map(|value| format!(",\n  \"sig2\": \"{value}\""))
+        .unwrap_or_default();
     Ok(format!(
-        "{{\n  \"license_key\": \"{}\",\n  \"instance_id\": \"{}\",\n  \"machine_id\": \"{}\",\n  \"customer_name\": \"{}\",\n  \"customer_email\": \"{}\",\n  \"activated_at_ms\": {},\n  \"last_validated_at_ms\": {},\n  \"sig\": \"{}\"\n}}\n",
+        "{{\n  \"license_key\": \"{}\",\n  \"instance_id\": \"{}\",\n  \"machine_id\": \"{}\",\n  \"customer_name\": \"{}\",\n  \"customer_email\": \"{}\",\n  \"activated_at_ms\": {},\n  \"last_validated_at_ms\": {},\n  \"sig\": \"{}\"{}\n}}\n",
         json_escape(&license.key),
         json_escape(&license.instance_id),
         json_escape(&license.machine_id),
@@ -283,7 +313,8 @@ fn license_json(license: &License) -> Result<String, String> {
         json_escape(&license.email),
         license.activated_at_ms,
         license.last_validated_at_ms,
-        signature
+        signature,
+        second_field
     ))
 }
 
@@ -513,6 +544,30 @@ mod tests {
     #[test]
     fn secret_is_32_bytes() {
         assert_eq!(base64_decode(HMAC_SECRET_B64).unwrap().len(), 32);
+        assert_eq!(base64_decode(HMAC_SECRET_V2_B64).unwrap().len(), 32);
+    }
+
+    #[test]
+    fn versioned_signature_fields() {
+        let license = License {
+            key: "key".into(),
+            instance_id: "instance".into(),
+            machine_id: "machine".into(),
+            name: "name".into(),
+            email: "email".into(),
+            activated_at_ms: 1,
+            last_validated_at_ms: 2,
+        };
+        let old_json = license_json(&license, Version::V1219).unwrap();
+        let new_json = license_json(&license, Version::V1220).unwrap();
+        assert!(!old_json.contains("\"sig2\""));
+        assert!(new_json.contains("\"sig2\""));
+        let message = b"key|instance|machine|name|email|1|2";
+        let expected = base64_encode(&hmac_sha256(
+            &base64_decode(HMAC_SECRET_V2_B64).unwrap(),
+            message,
+        ));
+        assert!(new_json.contains(&format!("\"sig2\": \"{expected}\"")));
     }
 
     #[test]

@@ -1,64 +1,75 @@
-# LumaBar 1.2.19 — offline keygen + patcher
+# LumaBar 1.2.19 / 1.2.20 — standalone patcher + offline keygen
 
 **[Русская версия README](README.ru.md)**
 
-Windows tools for offline activation of **LumaBar 1.2.19 x64**:
+Windows x64 tools for two LumaBar versions:
 
-- `lumabar-keygen.exe` — generates a UUID key and a signed `license.json`.
-- `lumabar-patcher.exe` — verifies the original `lumabar.exe` by SHA-256 and creates a patched copy.
-- `lumabar-1.2.19-patched.exe` — a ready-to-use, runtime-verified binary that can replace the original.
+- `lumabar-patcher.exe` identifies an original binary by SHA-256 and creates a patched copy.
+- `lumabar-keygen.exe` generates a locally signed `license.json` for LumaBar 1.2.19 or 1.2.20.
+- `lumabar-1.2.20-standalone.exe` is the recommended ready-to-run build: **no key and no `license.json` required**.
+- `lumabar-1.2.19-patched.exe` is the legacy build and requires the keygen.
 
 Tooling author: **carunodev**.
 
-> Warning: this bypasses the application's licensing mechanism. It violates the program's terms and may result in license revocation or loss of access. Only the exact LumaBar version listed below is supported.
+> Warning: these tools bypass the application's licensing mechanism. This violates the program's terms and may result in license revocation or loss of access. Only the exact binary hashes listed below are supported.
 
-## Quick start
+## LumaBar 1.2.20 — recommended standalone mode
 
-1. Fully exit LumaBar through its tray icon → **Quit**.
-2. Download all three `.exe` files from the [latest release](../../releases/latest), or download `lumabar-offline-bundle.zip`.
-3. Back up the original `lumabar.exe`.
-4. Replace it with `lumabar-1.2.19-patched.exe`, renaming the patched file back to `lumabar.exe`.
-5. Run `lumabar-keygen.exe --install`.
-6. Start LumaBar.
+Download `lumabar-1.2.20-standalone.exe` from the [latest release](../../releases/latest) and run it. No installer, keygen, license file, or Polar activation is needed.
 
-Typical **elevated PowerShell** commands, run from the download directory:
+To patch your own original binary instead:
 
 ```powershell
-Copy-Item "$env:ProgramFiles\lumabar\lumabar.exe" "$env:ProgramFiles\lumabar\lumabar.exe.bak"
-Copy-Item ".\lumabar-1.2.19-patched.exe" "$env:ProgramFiles\lumabar\lumabar.exe" -Force
-.\lumabar-keygen.exe --install
+.\lumabar-patcher.exe "C:\path\original-lumabar-1.2.20.exe" ".\lumabar-1.2.20-standalone.exe"
+.\lumabar-1.2.20-standalone.exe
 ```
 
-Keep the original `WebView2Loader.dll` in the installation directory.
-
-The keygen prints the new `license_key`, `instance_id`, `machine_id`, and output path. By default, the file is written to:
+The patcher verifies the input hash and every original byte before writing. The resulting file must have this SHA-256:
 
 ```text
-%APPDATA%\com.lumabar.dock\license.json
+b29d9877079f31cf46b3a527ee8146a606ec5c06774d1e8d77d55934cc0ebd8c
 ```
 
-## Patch the original binary yourself
+Standalone mode was verified with two cold starts without `license.json` or `license.prev.json`. `license_get_status` and `license_revalidate` returned `activated: true`, `stale: false`, and revalidation produced no Polar requests.
 
-You do not have to download the pre-patched binary. Put `lumabar-patcher.exe` next to the original `lumabar.exe`, then run:
+## Optional keygen for 1.2.20
 
-```powershell
-.\lumabar-patcher.exe "C:\Program Files\lumabar\lumabar.exe" ".\lumabar-1.2.19-patched.exe"
-```
-
-The patcher accepts only the original LumaBar **1.2.19 x64** binary with these properties:
-
-| Check | Value |
-|---|---|
-| File size | `25,060,864` bytes |
-| Original SHA-256 | `341a6d791bd61fc48b02612a8922016ab99cb2038607ba6241cf1c5233e8c7b0` |
-| Patch file offset | `0xB0AE1D` |
-| Patched SHA-256 | `f0af6c1d770d45571c6b4f7729251da51f8396a5b83541a9ea1ce303a0c8a4db` |
-
-After patching, run:
+The keygen defaults to LumaBar 1.2.20:
 
 ```powershell
 .\lumabar-keygen.exe --install
 ```
+
+It creates `%APPDATA%\com.lumabar.dock\license.json` with both signatures:
+
+- `sig`: the original HMAC-SHA256 signature;
+- `sig2`: the second HMAC-SHA256 signature introduced in LumaBar 1.2.20.
+
+Both signatures cover the same message:
+
+```text
+license_key|instance_id|machine_id|customer_name|customer_email|activated_at_ms|last_validated_at_ms
+```
+
+For 1.2.20, `last_validated_at_ms` is set to the current time. The new build rejects the old keygen's far-future timestamp during its local trust check.
+
+**The original, unpatched 1.2.20 binary still contacts Polar and deletes a generated file when the server returns 404.** Use the patched build. Standalone mode does not need this file at all.
+
+## Legacy LumaBar 1.2.19 mode
+
+Patch the original binary:
+
+```powershell
+.\lumabar-patcher.exe "C:\path\original-lumabar-1.2.19.exe" ".\lumabar-1.2.19-patched.exe"
+```
+
+Generate its license:
+
+```powershell
+.\lumabar-keygen.exe --version 1.2.19 --install
+```
+
+Start `lumabar-1.2.19-patched.exe`. The legacy keygen keeps the far-future `last_validated_at_ms` behavior required by the old 14-day freshness logic.
 
 ## Keygen options
 
@@ -71,14 +82,16 @@ lumabar-keygen.exe [options]
 --name <value>        Customer name shown in the license status
 --email <value>       Customer email shown in the license status
 --machine-id <value>  MachineGuid of another computer
+--version <version>   1.2.19 or 1.2.20 (default: 1.2.20)
 ```
 
 Defaults:
 
 ```text
-name:  carunodev
-email: carunodev@localhost
-output: .\license.json
+name:    carunodev
+email:   carunodev@localhost
+version: 1.2.20
+output:  .\license.json
 ```
 
 Example for another PC:
@@ -93,30 +106,16 @@ Read `MachineGuid` on the target PC with:
 reg query "HKLM\SOFTWARE\Microsoft\Cryptography" /v MachineGuid
 ```
 
-Then copy the generated `license.json` to `%APPDATA%\com.lumabar.dock\` on that PC.
+The generated UUID is **not a Polar server license** and cannot be activated on the website. It is only a local value inside the signed JSON.
 
-## Important: what the generated key is
+## Supported binaries
 
-The generated UUID **is not a Polar server license** and cannot be activated on the website. It is used locally inside the signed `license.json`.
+| Version | Original size | Original SHA-256 | Patched SHA-256 |
+|---|---:|---|---|
+| 1.2.19 | `25,060,864` | `341a6d791bd61fc48b02612a8922016ab99cb2038607ba6241cf1c5233e8c7b0` | `f0af6c1d770d45571c6b4f7729251da51f8396a5b83541a9ea1ce303a0c8a4db` |
+| 1.2.20 | `25,396,736` | `ecaadc7c0241244b8b19bdc836a213c2297ee269dab905f9fffda6607d991d9c` | `b29d9877079f31cf46b3a527ee8146a606ec5c06774d1e8d77d55934cc0ebd8c` |
 
-Both parts are required:
-
-1. The keygen creates a file with the correct signature.
-2. The patched `lumabar.exe` accepts the local status instead of revalidating it through Polar.
-
-The original, unpatched binary will delete this file during server revalidation.
-
-## How it works
-
-License-file signature:
-
-```text
-base64(HMAC-SHA256(secret, license_key|instance_id|machine_id|customer_name|customer_email|activated_at_ms|last_validated_at_ms))
-```
-
-`last_validated_at_ms` is set in the future, so the 14-day freshness check remains fresh.
-
-The binary patch is located in `license_revalidate`. Immediately after `StoredLicense` is loaded, execution is transferred to the existing `machine_id → LicenseStatus → cleanup` path before an HTTP request is constructed. Only 5 bytes are changed at file offset `0xB0AE1D`.
+Unknown, partially patched, and already patched inputs are rejected. For 1.2.20, five file offsets are patched: `0x86942E`, `0xB3BF40`, `0xB3C35E`, `0xACAC72`, and `0xC45736`. The legacy 1.2.19 patch changes five bytes at `0xB0AE1D`.
 
 ## Build from source
 
@@ -131,22 +130,12 @@ Build outputs are written to `target\release\`.
 
 ## Verification performed
 
-- 6 unit tests covering SHA-256, HMAC-SHA256, Base64, and JSON escaping.
-- Independent signature verification with Python `hmac` and `hashlib`.
-- The patcher's output matched the Rizin-produced patch byte for byte.
-- The original Tauri/WebView2 runtime returned this result for both `license_get_status` and `license_revalidate`:
-
-```json
-{
-  "activated": true,
-  "stale": false,
-  "customerName": "carunodev",
-  "customerEmail": "carunodev@localhost"
-}
-```
-
-- Cold restart verified: `license.json` is preserved and the status remains activated.
+- 8 unit tests passed across the keygen and patcher.
+- Both patcher outputs matched the Rizin-produced binaries byte for byte.
+- Python `hmac` and `hashlib` independently verified `sig` and `sig2`.
+- The patched 1.2.20 Tauri/WebView2 runtime accepted the generated nine-field license and returned `activated: true` with the configured customer name and email.
+- Standalone 1.2.20 passed cold-start, IPC, paywall, and Polar-request checks without any license file.
 
 ## License
 
-The keygen and patcher source code is available under [MIT](LICENSE). The original `lumabar.exe` belongs to its developer; the pre-patched binary is not relicensed under MIT.
+The keygen and patcher source code is available under [MIT](LICENSE). The original `lumabar.exe` belongs to its developer; pre-patched binaries are not relicensed under MIT.

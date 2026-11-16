@@ -27,11 +27,76 @@ unsafe extern "system" {
     fn BCryptFinishHash(hash: *mut c_void, output: *mut u8, length: u32, flags: u32) -> i32;
 }
 
-const ORIGINAL_SHA256: &str = "341a6d791bd61fc48b02612a8922016ab99cb2038607ba6241cf1c5233e8c7b0";
-const PATCHED_SHA256: &str = "f0af6c1d770d45571c6b4f7729251da51f8396a5b83541a9ea1ce303a0c8a4db";
-const PATCH_OFFSET: usize = 0xb0ae1d;
-const ORIGINAL_PATCH_BYTES: &[u8; 5] = &[0x48, 0xc7, 0x85, 0x00, 0x03];
-const PATCH_BYTES: &[u8; 5] = &[0xe9, 0xa0, 0x04, 0x00, 0x00];
+struct BinaryPatch {
+    offset: usize,
+    original: &'static [u8],
+    patched: &'static [u8],
+}
+
+struct Version {
+    name: &'static str,
+    file_size: usize,
+    original_sha256: &'static str,
+    patched_sha256: &'static str,
+    output_name: &'static str,
+    standalone: bool,
+    patches: &'static [BinaryPatch],
+}
+
+const PATCHES_1219: &[BinaryPatch] = &[BinaryPatch {
+    offset: 0xb0ae1d,
+    original: &[0x48, 0xc7, 0x85, 0x00, 0x03],
+    patched: &[0xe9, 0xa0, 0x04, 0x00, 0x00],
+}];
+
+const PATCHES_1220: &[BinaryPatch] = &[
+    BinaryPatch {
+        offset: 0x86942e,
+        original: &[0x31, 0xff],
+        patched: &[0xff, 0xc7],
+    },
+    BinaryPatch {
+        offset: 0xb3bf40,
+        original: &[0x4c, 0x89, 0xe9, 0x48, 0x8b],
+        patched: &[0xe9, 0xed, 0x03, 0x00, 0x00],
+    },
+    BinaryPatch {
+        offset: 0xb3c35e,
+        original: &[0x00, 0x00, 0x00, 0x00],
+        patched: &[0x01, 0x00, 0x00, 0x00],
+    },
+    BinaryPatch {
+        offset: 0xacac72,
+        original: &[0x0f, 0xb6, 0x05, 0x3f, 0x1e, 0xc9, 0x00],
+        patched: &[0xb0, 0x01, 0x90, 0x90, 0x90, 0x90, 0x90],
+    },
+    BinaryPatch {
+        offset: 0xc45736,
+        original: &[0x0f, 0xb6, 0x05, 0x7b, 0x73, 0xb1, 0x00],
+        patched: &[0xb0, 0x01, 0x90, 0x90, 0x90, 0x90, 0x90],
+    },
+];
+
+const VERSIONS: &[Version] = &[
+    Version {
+        name: "1.2.19",
+        file_size: 25060864,
+        original_sha256: "341a6d791bd61fc48b02612a8922016ab99cb2038607ba6241cf1c5233e8c7b0",
+        patched_sha256: "f0af6c1d770d45571c6b4f7729251da51f8396a5b83541a9ea1ce303a0c8a4db",
+        output_name: "lumabar-1.2.19-patched.exe",
+        standalone: false,
+        patches: PATCHES_1219,
+    },
+    Version {
+        name: "1.2.20",
+        file_size: 25396736,
+        original_sha256: "ecaadc7c0241244b8b19bdc836a213c2297ee269dab905f9fffda6607d991d9c",
+        patched_sha256: "b29d9877079f31cf46b3a527ee8146a606ec5c06774d1e8d77d55934cc0ebd8c",
+        output_name: "lumabar-1.2.20-standalone.exe",
+        standalone: true,
+        patches: PATCHES_1220,
+    },
+];
 
 fn main() -> ExitCode {
     match run() {
@@ -48,51 +113,77 @@ fn run() -> Result<(), String> {
     let input = args.next().map(PathBuf::from).ok_or_else(|| {
         "usage: lumabar-patcher.exe <original-lumabar.exe> [patched-output.exe]".to_owned()
     })?;
-    let output = args
-        .next()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| input.with_file_name("lumabar-1.2.19-patched.exe"));
+    let requested_output = args.next().map(PathBuf::from);
     if args.next().is_some() {
         return Err("too many arguments".into());
     }
     let mut bytes =
         fs::read(&input).map_err(|error| format!("cannot read {}: {error}", input.display()))?;
-    if bytes.len() != 25060864 {
-        return Err(format!(
-            "unexpected file size {}; expected 25060864",
-            bytes.len()
-        ));
-    }
     let digest = hex_encode(&sha256(&bytes)?);
-    if digest == PATCHED_SHA256 {
-        return Err("input is already patched".into());
+    if let Some(version) = VERSIONS.iter().find(|item| item.patched_sha256 == digest) {
+        return Err(format!("input is already patched LumaBar {}", version.name));
     }
-    if digest != ORIGINAL_SHA256 {
-        return Err(format!("unsupported lumabar.exe SHA-256: {digest}"));
-    }
-    let actual = bytes
-        .get(PATCH_OFFSET..PATCH_OFFSET + 5)
-        .ok_or("patch offset is outside the file")?;
-    if actual != ORIGINAL_PATCH_BYTES {
+    let version = VERSIONS
+        .iter()
+        .find(|item| item.original_sha256 == digest)
+        .ok_or_else(|| format!("unsupported lumabar.exe SHA-256: {digest}"))?;
+    if bytes.len() != version.file_size {
         return Err(format!(
-            "unexpected bytes at 0x{PATCH_OFFSET:x}: {}",
-            hex_encode(actual)
+            "unexpected file size {}; expected {} for LumaBar {}",
+            bytes.len(),
+            version.file_size,
+            version.name
         ));
     }
-    bytes[PATCH_OFFSET..PATCH_OFFSET + 5].copy_from_slice(PATCH_BYTES);
+    apply_patches(&mut bytes, version)?;
     let patched_digest = hex_encode(&sha256(&bytes)?);
-    if patched_digest != PATCHED_SHA256 {
+    if patched_digest != version.patched_sha256 {
         return Err(format!("post-patch digest mismatch: {patched_digest}"));
     }
+    let output = requested_output.unwrap_or_else(|| input.with_file_name(version.output_name));
     if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
         fs::create_dir_all(parent)
             .map_err(|error| format!("cannot create {}: {error}", parent.display()))?;
     }
     fs::write(&output, &bytes)
         .map_err(|error| format!("cannot write {}: {error}", output.display()))?;
+    println!("version: {}", version.name);
     println!("patched: {}", output.display());
-    println!("offset: 0x{PATCH_OFFSET:x}");
+    for patch in version.patches {
+        println!(
+            "offset: 0x{:x} ({} bytes)",
+            patch.offset,
+            patch.patched.len()
+        );
+    }
+    println!(
+        "mode: {}",
+        if version.standalone {
+            "standalone, no license.json required"
+        } else {
+            "offline signed license required"
+        }
+    );
     println!("sha256: {patched_digest}");
+    Ok(())
+}
+
+fn apply_patches(bytes: &mut [u8], version: &Version) -> Result<(), String> {
+    for patch in version.patches {
+        let actual = bytes
+            .get(patch.offset..patch.offset + patch.original.len())
+            .ok_or_else(|| format!("patch offset 0x{:x} is outside the file", patch.offset))?;
+        if actual != patch.original {
+            return Err(format!(
+                "unexpected bytes at 0x{:x}: {}",
+                patch.offset,
+                hex_encode(actual)
+            ));
+        }
+    }
+    for patch in version.patches {
+        bytes[patch.offset..patch.offset + patch.patched.len()].copy_from_slice(patch.patched);
+    }
     Ok(())
 }
 
@@ -168,5 +259,32 @@ mod tests {
             hex_encode(&sha256(b"abc").unwrap()),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn patch_tables_apply_exactly() {
+        for version in VERSIONS {
+            let size = version
+                .patches
+                .iter()
+                .map(|patch| patch.offset + patch.patched.len())
+                .max()
+                .unwrap();
+            let mut bytes = vec![0u8; size];
+            for patch in version.patches {
+                assert_eq!(patch.original.len(), patch.patched.len());
+                assert_ne!(patch.original, patch.patched);
+                bytes[patch.offset..patch.offset + patch.original.len()]
+                    .copy_from_slice(patch.original);
+            }
+            apply_patches(&mut bytes, version).unwrap();
+            for patch in version.patches {
+                assert_eq!(
+                    &bytes[patch.offset..patch.offset + patch.patched.len()],
+                    patch.patched
+                );
+            }
+            assert!(apply_patches(&mut bytes, version).is_err());
+        }
     }
 }
