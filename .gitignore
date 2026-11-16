@@ -1,0 +1,4 @@
+/target/
+/license.json
+*.pdb
+*.bak
