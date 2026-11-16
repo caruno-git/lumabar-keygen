@@ -1,25 +1,27 @@
 # LumaBar 1.2.19 — offline keygen + patcher
 
-Инструменты для офлайн-активации **LumaBar 1.2.19 x64** на Windows:
+**[Русская версия README](README.ru.md)**
 
-- `lumabar-keygen.exe` — генерирует UUID-ключ и подписанный `license.json`.
-- `lumabar-patcher.exe` — проверяет оригинальный `lumabar.exe` по SHA-256 и создаёт патченную копию.
-- `lumabar-1.2.19-patched.exe` — готовый проверенный бинарь для замены оригинального.
+Windows tools for offline activation of **LumaBar 1.2.19 x64**:
 
-Автор исходного кода инструментов: **carunodev**.
+- `lumabar-keygen.exe` — generates a UUID key and a signed `license.json`.
+- `lumabar-patcher.exe` — verifies the original `lumabar.exe` by SHA-256 and creates a patched copy.
+- `lumabar-1.2.19-patched.exe` — a ready-to-use, runtime-verified binary that can replace the original.
 
-> Внимание: это обход лицензионного механизма. Использование может привести к отзыву лицензии или блокировке доступа и нарушает условия программы. Поддерживается только указанная версия LumaBar.
+Tooling author: **carunodev**.
 
-## Быстрый старт
+> Warning: this bypasses the application's licensing mechanism. It violates the program's terms and may result in license revocation or loss of access. Only the exact LumaBar version listed below is supported.
 
-1. Полностью закрой LumaBar через иконку в трее → **Quit**.
-2. Скачай три `.exe` из [последнего release](../../releases/latest).
-3. Сделай резервную копию оригинального `lumabar.exe`.
-4. Замени оригинальный файл на `lumabar-1.2.19-patched.exe`, переименовав его обратно в `lumabar.exe`.
-5. Запусти `lumabar-keygen.exe --install`.
-6. Запусти LumaBar.
+## Quick start
 
-Типовые команды для PowerShell **от администратора** (из папки со скачанными файлами):
+1. Fully exit LumaBar through its tray icon → **Quit**.
+2. Download all three `.exe` files from the [latest release](../../releases/latest), or download `lumabar-offline-bundle.zip`.
+3. Back up the original `lumabar.exe`.
+4. Replace it with `lumabar-1.2.19-patched.exe`, renaming the patched file back to `lumabar.exe`.
+5. Run `lumabar-keygen.exe --install`.
+6. Start LumaBar.
+
+Typical **elevated PowerShell** commands, run from the download directory:
 
 ```powershell
 Copy-Item "$env:ProgramFiles\lumabar\lumabar.exe" "$env:ProgramFiles\lumabar\lumabar.exe.bak"
@@ -27,51 +29,51 @@ Copy-Item ".\lumabar-1.2.19-patched.exe" "$env:ProgramFiles\lumabar\lumabar.exe"
 .\lumabar-keygen.exe --install
 ```
 
-Не удаляй штатный `WebView2Loader.dll` из папки установки.
+Keep the original `WebView2Loader.dll` in the installation directory.
 
-Keygen выведет новый `license_key`, `instance_id`, `machine_id` и путь к созданному файлу. По умолчанию файл записывается в:
+The keygen prints the new `license_key`, `instance_id`, `machine_id`, and output path. By default, the file is written to:
 
 ```text
 %APPDATA%\com.lumabar.dock\license.json
 ```
 
-## Если хочешь пропатчить оригинал сам
+## Patch the original binary yourself
 
-Необязательно скачивать готовый патченный бинарь. Положи рядом `lumabar-patcher.exe` и оригинальный `lumabar.exe`, затем:
+You do not have to download the pre-patched binary. Put `lumabar-patcher.exe` next to the original `lumabar.exe`, then run:
 
 ```powershell
 .\lumabar-patcher.exe "C:\Program Files\lumabar\lumabar.exe" ".\lumabar-1.2.19-patched.exe"
 ```
 
-Patcher принимает только оригинальный файл LumaBar **1.2.19 x64** с этими параметрами:
+The patcher accepts only the original LumaBar **1.2.19 x64** binary with these properties:
 
-| Проверка | Значение |
+| Check | Value |
 |---|---|
-| Размер | `25 060 864` байта |
-| SHA-256 оригинала | `341a6d791bd61fc48b02612a8922016ab99cb2038607ba6241cf1c5233e8c7b0` |
-| File offset патча | `0xB0AE1D` |
-| SHA-256 результата | `f0af6c1d770d45571c6b4f7729251da51f8396a5b83541a9ea1ce303a0c8a4db` |
+| File size | `25,060,864` bytes |
+| Original SHA-256 | `341a6d791bd61fc48b02612a8922016ab99cb2038607ba6241cf1c5233e8c7b0` |
+| Patch file offset | `0xB0AE1D` |
+| Patched SHA-256 | `f0af6c1d770d45571c6b4f7729251da51f8396a5b83541a9ea1ce303a0c8a4db` |
 
-После успешного патча выполни:
+After patching, run:
 
 ```powershell
 .\lumabar-keygen.exe --install
 ```
 
-## Параметры keygen
+## Keygen options
 
 ```text
 lumabar-keygen.exe [options]
 
---install             Записать license.json в конфиг LumaBar
---output <path>       Записать JSON в выбранный файл
---stdout              Только вывести JSON, ничего не записывать
---name <value>        Имя в статусе лицензии
---email <value>       Email в статусе лицензии
---machine-id <value>  MachineGuid другого компьютера
+--install             Write license.json into the LumaBar config directory
+--output <path>       Write JSON to a selected file
+--stdout              Print JSON without writing a file
+--name <value>        Customer name shown in the license status
+--email <value>       Customer email shown in the license status
+--machine-id <value>  MachineGuid of another computer
 ```
 
-По умолчанию используются:
+Defaults:
 
 ```text
 name:  carunodev
@@ -79,60 +81,60 @@ email: carunodev@localhost
 output: .\license.json
 ```
 
-Пример для другого ПК:
+Example for another PC:
 
 ```powershell
 .\lumabar-keygen.exe --machine-id "11111111-2222-3333-4444-555555555555" --name "User" --email "user@example.com" --output ".\license.json"
 ```
 
-`MachineGuid` на целевом ПК можно посмотреть так:
+Read `MachineGuid` on the target PC with:
 
 ```powershell
 reg query "HKLM\SOFTWARE\Microsoft\Cryptography" /v MachineGuid
 ```
 
-Затем скопируй созданный `license.json` в `%APPDATA%\com.lumabar.dock\` на целевом ПК.
+Then copy the generated `license.json` to `%APPDATA%\com.lumabar.dock\` on that PC.
 
-## Важно про сгенерированный ключ
+## Important: what the generated key is
 
-Сгенерированный UUID **не является серверной лицензией Polar** и не активируется на сайте. Он используется локально в подписанном `license.json`.
+The generated UUID **is not a Polar server license** and cannot be activated on the website. It is used locally inside the signed `license.json`.
 
-Обязательны обе части:
+Both parts are required:
 
-1. keygen создаёт файл с корректной подписью;
-2. патченный `lumabar.exe` принимает локальный статус вместо повторной проверки через Polar.
+1. The keygen creates a file with the correct signature.
+2. The patched `lumabar.exe` accepts the local status instead of revalidating it through Polar.
 
-Оригинальный непропатченный бинарь при повторной серверной проверке удалит такой файл.
+The original, unpatched binary will delete this file during server revalidation.
 
-## Как это работает
+## How it works
 
-Подпись файла:
+License-file signature:
 
 ```text
 base64(HMAC-SHA256(secret, license_key|instance_id|machine_id|customer_name|customer_email|activated_at_ms|last_validated_at_ms))
 ```
 
-`last_validated_at_ms` выставляется в будущем, поэтому 14-дневная проверка freshness остаётся свежей.
+`last_validated_at_ms` is set in the future, so the 14-day freshness check remains fresh.
 
-Бинарный патч находится в `license_revalidate`: сразу после успешной загрузки `StoredLicense` управление передаётся существующей ветке `machine_id → LicenseStatus → cleanup`, до создания HTTP-запроса. Изменено 5 байт по file offset `0xB0AE1D`.
+The binary patch is located in `license_revalidate`. Immediately after `StoredLicense` is loaded, execution is transferred to the existing `machine_id → LicenseStatus → cleanup` path before an HTTP request is constructed. Only 5 bytes are changed at file offset `0xB0AE1D`.
 
-## Сборка из исходников
+## Build from source
 
-Нужен stable Rust/Cargo на Windows. Внешних crate-зависимостей нет.
+Install stable Rust/Cargo on Windows. No external crates are required.
 
 ```powershell
 cargo test --all-targets
 cargo build --release --all-targets
 ```
 
-Результат появится в `target\release\`.
+Build outputs are written to `target\release\`.
 
-## Проверено
+## Verification performed
 
-- 6 unit-тестов: SHA-256, HMAC-SHA256, Base64, JSON escaping.
-- Независимая сверка подписи через Python `hmac` + `hashlib`.
-- Patcher побайтово совпал с патчем, сделанным через Rizin.
-- Оригинальный Tauri/WebView2 runtime вернул для `license_get_status` и `license_revalidate`:
+- 6 unit tests covering SHA-256, HMAC-SHA256, Base64, and JSON escaping.
+- Independent signature verification with Python `hmac` and `hashlib`.
+- The patcher's output matched the Rizin-produced patch byte for byte.
+- The original Tauri/WebView2 runtime returned this result for both `license_get_status` and `license_revalidate`:
 
 ```json
 {
@@ -143,8 +145,8 @@ cargo build --release --all-targets
 }
 ```
 
-- Проверен холодный перезапуск: `license.json` сохраняется, статус остаётся активным.
+- Cold restart verified: `license.json` is preserved and the status remains activated.
 
-## Лицензия
+## License
 
-Исходный код keygen и patcher распространяется под [MIT](LICENSE). Права на оригинальный `lumabar.exe` принадлежат его разработчику; готовый патченный бинарь не перелицензируется под MIT.
+The keygen and patcher source code is available under [MIT](LICENSE). The original `lumabar.exe` belongs to its developer; the pre-patched binary is not relicensed under MIT.
